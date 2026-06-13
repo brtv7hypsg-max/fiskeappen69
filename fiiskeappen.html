@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎣 Fiskeappen</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #0f172a;
+    color: white;
+}
+
+header {
+    background: #1e3a8a;
+    padding: 20px;
+    text-align: center;
+    font-size: 22px;
+    color: #facc15;
+    font-weight: bold;
+}
+
+.container { padding: 15px; }
+
+.card {
+    background: #1e293b;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+select, input {
+    width: 100%;
+    padding: 10px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    font-weight: bold;
+    border: none;
+    margin-top: 5px;
+}
+
+.save { background: #2563eb; color: white; }
+.delete { background: #dc2626; color: white; }
+
+.fangst {
+    background: #0f172a;
+    border: 1px solid #334155;
+    padding: 10px;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+img {
+    width: 100%;
+    max-height: 200px;
+    object-fit: cover;
+    margin-top: 10px;
+}
+</style>
+</head>
+
+<body>
+
+<header>🎣 Fiskeappen</header>
+
+<div class="container">
+
+<div class="card">
+    <h3>🏆 Største fangster</h3>
+    <p id="storSjo">🌊 Sjø: ingen data</p>
+    <p id="storFersk">🐟 Ferskvann: ingen data</p>
+</div>
+
+<div class="card">
+    <h3>Legg til fangst</h3>
+
+    <select id="kategori" onchange="oppdaterFisketyper()">
+        <option value="">Velg kategori</option>
+        <option value="ferskvann">🐟 Ferskvann</option>
+        <option value="sjø">🌊 Sjø</option>
+    </select>
+
+    <select id="art">
+        <option value="">Velg fisketype</option>
+    </select>
+
+    <input id="vekt" placeholder="Vekt (kg)">
+    <input id="lengde" placeholder="Lengde (cm)">
+    <input type="file" id="bilde">
+
+    <button class="save" onclick="lagreFangst()">💾 Lagre fangst</button>
+</div>
+
+<button type="button" onclick="hentPosisjon()">📍 Hent posisjon</button>
+<p id="postekst">Ingen posisjon valgt</p>
+
+<div class="card">
+    <h3>📊 Statistikk</h3>
+    <p id="antall">Antall fangster: 0</p>
+</div>
+
+<div id="liste"></div>
+
+</div>
+
+<script>
+const fisker = {
+    ferskvann: ["Ørret","Røye","Abbor","Gjedde","Harr","Sik","Løye","Lake"],
+    sjø: ["Laks","Sjøørret","Torsk","Sei","Hyse","Makrell","Rødspette","Flyndre","Steinbit","Ål"]
+};
+
+let fangster = JSON.parse(localStorage.getItem("fangster")) || [];
+
+function oppdaterFisketyper() {
+    let kategori = document.getElementById("kategori").value;
+    let artSelect = document.getElementById("art");
+
+    artSelect.innerHTML = '<option value="">Velg fisketype</option>';
+
+    if (!fisker[kategori]) return;
+
+    fisker[kategori].forEach(fisk => {
+        let option = document.createElement("option");
+        option.value = fisk;
+        option.textContent = fisk;
+        artSelect.appendChild(option);
+    });
+}
+
+function lagreFangst() {
+    let art = document.getElementById("art").value;
+    let vekt = document.getElementById("vekt").value;
+    let lengde = document.getElementById("lengde").value;
+    let bilde = document.getElementById("bilde").files[0];
+    let kategori = document.getElementById("kategori").value;
+
+    if (!kategori) return alert("Velg kategori");
+    if (!art) return alert("Velg fisketype");
+    if (!vekt) return alert("Skriv vekt");
+    if (!lengde) return alert("Skriv lengde");
+
+    let dato = new Date().toLocaleDateString("no-NO");
+
+    function leggTil(bildeData) {
+        fangster.push({
+            art,
+            vekt,
+            lengde,
+            kategori,
+            dato,
+            bilde: bildeData
+        });
+
+        document.getElementById("vekt").value = "";
+        document.getElementById("lengde").value = "";
+        document.getElementById("bilde").value = "";
+
+        visFangster();
+    }
+
+    if (bilde) {
+        let reader = new FileReader();
+        reader.onload = e => leggTil(e.target.result);
+        reader.readAsDataURL(bilde);
+    } else {
+        leggTil(null);
+    }
+}
+
+function visFangster() {
+    let liste = document.getElementById("liste");
+    liste.innerHTML = "";
+
+    fangster.forEach((f, i) => {
+        liste.innerHTML += `
+        <div class="card fangst">
+            <b>🎣 ${f.art}</b><br>
+            ${f.vekt} kg - ${f.lengde} cm<br>
+            ${f.dato}
+            ${f.bilde ? `<img src="${f.bilde}">` : ""}
+            <button class="delete" onclick="slett(${i})">🗑 Slett</button>
+        </div>
+        `;
+    });
+
+    document.getElementById("antall").innerText =
+        "Antall fangster: " + fangster.length;
+
+    localStorage.setItem("fangster", JSON.stringify(fangster));
+
+    oppdaterPodium();
+}
+
+function oppdaterPodium() {
+    let storSjo = null;
+    let storFersk = null;
+
+    fangster.forEach(f => {
+        let vekt = parseFloat(f.vekt);
+
+        if (f.kategori === "sjø") {
+            if (!storSjo || vekt > parseFloat(storSjo.vekt)) storSjo = f;
+        }
+
+        if (f.kategori === "ferskvann") {
+            if (!storFersk || vekt > parseFloat(storFersk.vekt)) storFersk = f;
+        }
+    });
+
+    document.getElementById("storSjo").innerText =
+        storSjo ? `🌊 Sjø: ${storSjo.art} - ${storSjo.vekt} kg` : "🌊 Sjø: ingen data";
+
+    document.getElementById("storFersk").innerText =
+        storFersk ? `🐟 Ferskvann: ${storFersk.art} - ${storFersk.vekt} kg` : "🐟 Ferskvann: ingen data";
+}
+
+function slett(index) {
+    fangster.splice(index, 1);
+    visFangster();
+}
+
+function hentPosisjon() {
+    if (!navigator.geolocation) {
+        alert("Geolokasjon støttes ikke");
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(pos => {
+        document.getElementById("postekst").innerText =
+            `Lat: ${pos.coords.latitude}, Lon: ${pos.coords.longitude}`;
+    });
+}
+
+visFangster();
+</script>
+
+</body>
+</html>
